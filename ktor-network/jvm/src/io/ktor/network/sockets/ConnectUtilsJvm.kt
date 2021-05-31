@@ -6,17 +6,33 @@ package io.ktor.network.sockets
 
 import io.ktor.network.selector.*
 import io.ktor.util.network.*
+import java.net.*
 
 internal actual suspend fun connect(
     selector: SelectorManager,
     networkAddress: NetworkAddress,
     socketOptions: SocketOptions.TCPClientSocketOptions
-): Socket = selector.buildOrClose({ openSocketChannel() }) {
-    assignOptions(socketOptions)
-    nonBlocking()
+): Socket = selector.buildOrClose({
+    if (networkAddress.javaClass.name == "java.net.UnixDomainSocketAddress") {
+        openSocketChannel(StandardProtocolFamily.UNIX)
+    } else {
+        openSocketChannel()
+    }
+}) {
+    if (networkAddress.javaClass.name == "java.net.UnixDomainSocketAddress") {
+        nonBlocking()
 
-    SocketImpl(this, socket()!!, selector, socketOptions).apply {
-        connect(networkAddress)
+        val dummySocket = Socket()
+        SocketImpl(this, dummySocket, selector, socketOptions).apply {
+            connect(networkAddress)
+        }
+    } else {
+        assignOptions(socketOptions)
+        nonBlocking()
+
+        SocketImpl(this, socket()!!, selector, socketOptions).apply {
+            connect(networkAddress)
+        }
     }
 }
 
